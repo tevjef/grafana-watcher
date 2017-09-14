@@ -15,7 +15,9 @@
 package grafana
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,8 +82,21 @@ func (c *DashboardsClient) Delete(slug string) error {
 }
 
 func (c *DashboardsClient) Create(dashboardJson io.Reader) error {
+	// Grafana API mandates the .dashboard.id = null on the dashboard object.
+	jsonMap := make(map[string]interface{})
+	err := json.NewDecoder(dashboardJson).Decode(&jsonMap)
+	if err != nil {
+		return fmt.Errorf("error when decoding dashboard data: %v", err)
+	}
+	jsonMap["dashboard"].(map[string]interface{})["id"] = nil
+	jsonData, err := json.Marshal(jsonMap)
+	if err != nil {
+		return fmt.Errorf("error when encoding dashboard data: %v", err)
+	}
+
+	jsonReader := bytes.NewReader(jsonData)
 	importDashboardUrl := makeUrl(c.BaseUrl, "/api/dashboards/db")
-	req, err := http.NewRequest("POST", importDashboardUrl, dashboardJson)
+	req, err := http.NewRequest("POST", importDashboardUrl, jsonReader)
 	if err != nil {
 		return err
 	}
